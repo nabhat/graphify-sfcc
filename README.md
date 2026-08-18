@@ -3,8 +3,10 @@
 [![npm version](https://img.shields.io/npm/v/graphify-sfcc.svg?style=flat-square&color=blue)](https://www.npmjs.com/package/graphify-sfcc)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg?style=flat-square)](LICENSE)
 [![Node.js Version](https://img.shields.io/badge/node-%3E%3D20-brightgreen.svg?style=flat-square)](https://nodejs.org)
-[![Coverage](https://img.shields.io/badge/coverage-85.2%25-success.svg?style=flat-square)](#benchmark--accuracy)
-[![SonarCloud Quality Gate](https://img.shields.io/badge/SonarCloud-Passed-brightgreen.svg?style=flat-square)](https://sonarcloud.io/summary/overall?id=nabhat_graphify-sfcc)
+[![Build Status](https://img.shields.io/github/actions/workflow/status/nabhat/graphify-sfcc/build.yml?branch=main&style=flat-square&label=build)](https://github.com/nabhat/graphify-sfcc/actions/workflows/build.yml)
+[![Coverage](https://img.shields.io/badge/coverage-87.5%25-success.svg?style=flat-square)](#benchmark--accuracy)
+[![SonarCloud Quality Gate](https://sonarcloud.io/api/project_badges/measure?project=nabhat_graphify-sfcc2&metric=alert_status)](https://sonarcloud.io/summary/overall?id=nabhat_graphify-sfcc2)
+[![Socket Security](https://socket.dev/api/badge/npm/package/graphify-sfcc)](https://socket.dev/npm/package/graphify-sfcc)
 
 > 💡 **Quick Setup Guide:** For step-by-step setup instructions across **Claude Code, Claude Desktop, Cursor, Gemini, Windsurf, and VS Code**, see the dedicated **[INSTALLATION.md](INSTALLATION.md)** guide.
 
