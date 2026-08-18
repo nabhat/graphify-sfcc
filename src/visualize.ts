@@ -323,7 +323,8 @@ function buildHtml(o: HtmlOptions): string {
     <div id="btn-labels" class="btn active" onclick="toggleLabelMode()">Labels: Smart</div>
     <div class="btn" onclick="resetFocus()">Reset Focus</div>
     <div class="btn" onclick="network.fit({animation:{duration:400}})">Fit View</div>
-    <div id="btn-physics" class="btn active" onclick="togglePhysics()">Physics: On</div>
+    <div id="btn-physics" class="btn" onclick="togglePhysics()">Physics: Off</div>
+
   </div>
 </div>
 
