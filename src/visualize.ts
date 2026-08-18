@@ -1,12 +1,11 @@
 // Generates a standalone HTML visualisation of the sfcc-graph using vis-network (CDN).
-// No new Node deps: the heavy lifting (physics, rendering) runs in the browser.
+// Heavy lifting (physics, rendering, interaction) runs efficiently in the browser.
 
 import fs from 'node:fs';
 import path from 'pathe';
 import { exec } from 'node:child_process';
 import { importGraph } from './graph/graph.js';
 import { getRoot, cacheDir } from './resolve/repo.js';
-
 
 const CACHE_DIR = cacheDir();
 const CACHE_FILE = path.join(CACHE_DIR, 'graph.json');
@@ -48,7 +47,7 @@ const EDGE_COLOR: Record<string, string> = {
     requires:         'rgba(120,120,140,0.18)',
 };
 
-// requires edges hidden by default — 4000+ of them would make a solid blob.
+// Requires and definesPref edges hidden by default to prevent visual clutter
 const HIDDEN_BY_DEFAULT = new Set(['requires', 'definesPref']);
 
 // Kinds and edge kinds to strip in pruned mode.
@@ -66,7 +65,6 @@ function prune(
     );
     const connected = new Set<string>();
     keptEdges.forEach(e => { connected.add(e.from); connected.add(e.to); });
-    // keep every non-external node that participates in at least one structural edge
     const keptNodes = (nodes as any[]).filter(n => keepIds.has(n.id) && connected.has(n.id));
     return { nodes: keptNodes, edges: keptEdges };
 }
@@ -79,7 +77,7 @@ export interface VisualizeOptions {
 
 export function visualize(opts: VisualizeOptions = {}): string {
     if (!fs.existsSync(CACHE_FILE)) {
-        throw new Error('No cached graph found. Run `sfcc-graph build` first.');
+        throw new Error('No cached graph found. Run `graphify-sfcc build` first.');
     }
 
     const raw = JSON.parse(fs.readFileSync(CACHE_FILE, 'utf8'));
@@ -93,7 +91,6 @@ export function visualize(opts: VisualizeOptions = {}): string {
         degree.set(t, (degree.get(t) || 0) + 1);
     });
 
-    // collect unique values for filter panel
     const allKinds = new Set<string>();
     const allCartridges = new Set<string>();
 
@@ -109,11 +106,29 @@ export function visualize(opts: VisualizeOptions = {}): string {
         const fullLabel = String(a.label || n);
         allKinds.add(kind);
         if (cartridge) allCartridges.add(cartridge);
+
+        // Hide labels by default on minor nodes to prevent text overlap clutter
+        const showLabelByDefault = deg >= 8 || kind === 'route';
+
         visNodes.push({
-            id: n, label: shortLabel, title: fullLabel,
+            id: n,
+            label: showLabelByDefault ? shortLabel : '',
+            rawLabel: shortLabel,
+            title: fullLabel,
             color: { background: col.bg, border: col.border, highlight: { background: '#FFF176', border: col.border } },
-            size, font: { color: '#ffffff', size: 11 },
-            kind, cartridge, fullLabel, origin: String(a.origin || ''), deg
+            size,
+            font: {
+                color: '#f0f6fc',
+                size: 11,
+                strokeWidth: 3,
+                strokeColor: '#0d1117'
+            },
+            kind,
+            cartridge,
+            fullLabel,
+            origin: String(a.origin || ''),
+            deg,
+            showLabelByDefault
         });
     });
 
@@ -125,24 +140,24 @@ export function visualize(opts: VisualizeOptions = {}): string {
         const col = EDGE_COLOR[kind] || 'rgba(180,180,200,0.2)';
         const isBold = ['superModule', 'extendsRoute', 'rendersTemplate', 'callsHook', 'remoteIncludes', 'replaceRoute'].includes(kind);
         visEdges.push({
-            id: e, from: s, to: t,
+            id: e,
+            from: s,
+            to: t,
             color: { color: col, opacity: hidden ? 0 : 1 },
             width: isBold ? 2 : 1,
             hidden,
             kind,
             title: kind + (a.line ? ` :${a.line}` : '') + ` [${a.confidence || 'EXTRACTED'}]`,
-            arrows: { to: { enabled: true, scaleFactor: 0.4 } }
+            arrows: { to: { enabled: true, scaleFactor: 0.35 } }
         });
     });
 
     const kindList = [...allKinds].sort((a, b) => a.localeCompare(b));
     const cartridgeList = [...allCartridges].sort((a, b) => a.localeCompare(b));
 
-    // Apply pruning if requested — strip externals, noise edges, isolates.
     const finalNodes = opts.pruned ? prune(visNodes, visEdges).nodes : visNodes;
     const finalEdges = opts.pruned ? prune(visNodes, visEdges).edges : visEdges;
 
-    // In pruned mode all kept edges are meaningful — start them all visible.
     if (opts.pruned) {
         (finalEdges as any[]).forEach(e => { e.hidden = false; e.color = { ...e.color, opacity: 1 }; });
     }
@@ -151,7 +166,8 @@ export function visualize(opts: VisualizeOptions = {}): string {
     const outPath = opts.output ? path.resolve(opts.output) : path.join(getRoot(), defaultName);
 
     fs.writeFileSync(outPath, buildHtml({
-        visNodes: finalNodes, visEdges: finalEdges,
+        visNodes: finalNodes,
+        visEdges: finalEdges,
         kindList: opts.pruned
             ? [...new Set((finalNodes as any[]).map(n => n.kind))].sort((a, b) => a.localeCompare(b))
             : kindList,
@@ -216,18 +232,18 @@ function buildHtml(o: HtmlOptions): string {
           <span style="display:inline-block;width:22px;height:3px;background:${EDGE_COLOR[k]};vertical-align:middle;margin-right:4px"></span>${k}</label>`;
     }).join('\n');
 
-
     return `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>sfcc-graph${o.pruned ? ' (pruned)' : ''} — ${o.root.split(/[\\/]/).pop()}</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>graphify-sfcc${o.pruned ? ' (pruned)' : ''} — ${o.root.split(/[\\/]/).pop()}</title>
 <script src="https://cdn.jsdelivr.net/npm/vis-network@9.1.9/dist/vis-network.min.js"></script>
 <link href="https://cdn.jsdelivr.net/npm/vis-network@9.1.9/dist/dist/vis-network.min.css" rel="stylesheet"/>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   body { display: flex; height: 100vh; background: #0d1117; color: #c9d1d9; font: 12px/1.5 -apple-system, system-ui, sans-serif; overflow: hidden; }
-  #sidebar { width: 260px; min-width: 260px; background: #161b22; border-right: 1px solid #30363d; display: flex; flex-direction: column; overflow: hidden; }
+  #sidebar { width: 270px; min-width: 270px; background: #161b22; border-right: 1px solid #30363d; display: flex; flex-direction: column; overflow: hidden; }
   #sidebar-header { padding: 12px 14px 8px; border-bottom: 1px solid #30363d; flex-shrink: 0; }
   #sidebar-header h1 { font-size: 15px; font-weight: 700; color: #58a6ff; margin-bottom: 2px; }
   #sidebar-header .meta { font-size: 11px; color: #8b949e; }
@@ -235,22 +251,23 @@ function buildHtml(o: HtmlOptions): string {
   .tab { flex: 1; padding: 7px 4px; text-align: center; cursor: pointer; font-size: 11px; color: #8b949e; border-bottom: 2px solid transparent; user-select: none; }
   .tab.active { color: #58a6ff; border-bottom-color: #58a6ff; }
   #tab-content { flex: 1; overflow-y: auto; padding: 10px 12px; }
-  #search { width: 100%; padding: 6px 9px; background: #0d1117; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 12px; margin-bottom: 10px; outline: none; }
+  #search { width: 100%; padding: 6px 9px; background: #0d1117; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 12px; margin-bottom: 8px; outline: none; }
   #search:focus { border-color: #58a6ff; }
   .section-title { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: #8b949e; margin: 10px 0 6px; }
   .filter-row { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; cursor: pointer; font-size: 11.5px; }
   .filter-row input { cursor: pointer; accent-color: #58a6ff; }
   .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
-  #detail { background: #0d1117; border-top: 1px solid #30363d; padding: 10px 12px; font-size: 11.5px; min-height: 80px; flex-shrink: 0; }
+  #detail { background: #0d1117; border-top: 1px solid #30363d; padding: 10px 12px; font-size: 11.5px; min-height: 90px; flex-shrink: 0; }
   #detail h4 { color: #58a6ff; margin-bottom: 6px; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   #detail .row { display: flex; gap: 6px; margin-bottom: 2px; }
   #detail .key { color: #8b949e; flex-shrink: 0; width: 68px; }
   #detail .val { color: #c9d1d9; word-break: break-all; }
   #main { flex: 1; position: relative; }
   #graph { width: 100%; height: 100%; }
-  #toolbar { position: absolute; top: 10px; right: 14px; display: flex; gap: 6px; z-index: 10; }
-  .btn { padding: 5px 11px; background: #21262d; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 11px; cursor: pointer; user-select: none; }
-  .btn:hover { background: #30363d; }
+  #toolbar { position: absolute; top: 12px; right: 14px; display: flex; gap: 6px; z-index: 10; flex-wrap: wrap; }
+  .btn { padding: 5px 11px; background: #21262d; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 11px; cursor: pointer; user-select: none; transition: background 0.15s; }
+  .btn:hover { background: #30363d; color: #58a6ff; }
+  .btn.active { background: #1f6feb; color: #ffffff; border-color: #388bfd; }
   #loading { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(13,17,23,0.85); z-index: 20; gap: 12px; font-size: 13px; color: #8b949e; }
   .spinner { width: 32px; height: 32px; border: 3px solid #30363d; border-top-color: #58a6ff; border-radius: 50%; animation: spin .8s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
@@ -264,7 +281,7 @@ function buildHtml(o: HtmlOptions): string {
 
 <div id="sidebar">
   <div id="sidebar-header">
-    <h1>sfcc-graph${o.pruned ? ' <span style="font-size:10px;background:#238636;color:#fff;padding:1px 6px;border-radius:10px;vertical-align:middle;font-weight:600">PRUNED</span>' : ''}</h1>
+    <h1>graphify-sfcc${o.pruned ? ' <span style="font-size:10px;background:#238636;color:#fff;padding:1px 6px;border-radius:10px;vertical-align:middle;font-weight:600">PRUNED</span>' : ''}</h1>
     <div class="meta">${o.nodeCount} nodes · ${o.edgeCount} edges · ${o.builtAt}</div>
     ${o.pruned ? `<div class="meta" style="margin-top:3px;color:#8b949e">Externals, requires &amp; definesPref removed</div>` : ''}
   </div>
@@ -275,7 +292,7 @@ function buildHtml(o: HtmlOptions): string {
   </div>
   <div id="tab-content">
     <div id="tab-filters">
-      <input id="search" type="text" placeholder="Search nodes…" oninput="onSearch(this.value)">
+      <input id="search" type="text" placeholder="Search nodes (e.g. Home, Checkout)…" oninput="onSearch(this.value)">
       <div id="found-count"></div>
       <div class="section-title">Node Kind</div>
       ${kindCheckboxes}
@@ -292,20 +309,21 @@ function buildHtml(o: HtmlOptions): string {
     </div>
   </div>
   <div id="detail">
-    <div style="color:#8b949e;font-size:11px">Click a node to inspect it.</div>
+    <div style="color:#8b949e;font-size:11px">Click or hover a node to inspect its links.</div>
   </div>
 </div>
 
 <div id="main">
   <div id="loading">
     <div class="spinner"></div>
-    <span>Running force layout…</span>
+    <span>Optimizing graph layout…</span>
   </div>
   <div id="graph"></div>
   <div id="toolbar">
-    <div class="btn" onclick="network.fit()">Fit</div>
-    <div class="btn" onclick="togglePhysics()">Physics</div>
-    <div class="btn" onclick="network.setOptions({physics:{enabled:false}});network.fit()">Stop</div>
+    <div id="btn-labels" class="btn active" onclick="toggleLabelMode()">Labels: Smart</div>
+    <div class="btn" onclick="resetFocus()">Reset Focus</div>
+    <div class="btn" onclick="network.fit({animation:{duration:400}})">Fit View</div>
+    <div id="btn-physics" class="btn active" onclick="togglePhysics()">Physics: On</div>
   </div>
 </div>
 
@@ -315,51 +333,171 @@ const ALL_EDGES = ${JSON.stringify(o.visEdges)};
 
 let nodesDs, edgesDs, network;
 let physicsOn = true;
+let labelMode = 'smart'; // 'smart' | 'all' | 'none'
+let highlightedNodeId = null;
 
 // ---- init ------------------------------------------------------------------
 window.addEventListener('load', function() {
   nodesDs = new vis.DataSet(ALL_NODES);
   edgesDs = new vis.DataSet(ALL_EDGES);
+
+  const isLargeGraph = ALL_NODES.length > 350;
+  const isHugeGraph = ALL_NODES.length > 1000;
+
   const container = document.getElementById('graph');
   network = new vis.Network(container, { nodes: nodesDs, edges: edgesDs }, {
     physics: {
       enabled: true,
-      stabilization: { enabled: true, iterations: 150, updateInterval: 10 },
-      barnesHut: { gravitationalConstant: -2800, springConstant: 0.03, springLength: 100, damping: 0.15 }
+      solver: isLargeGraph ? 'forceAtlas2Based' : 'barnesHut',
+      forceAtlas2Based: {
+        gravitationalConstant: -35,
+        centralGravity: 0.015,
+        springLength: 80,
+        springConstant: 0.08,
+        damping: 0.4
+      },
+      barnesHut: {
+        gravitationalConstant: -2200,
+        springConstant: 0.04,
+        springLength: 90,
+        damping: 0.2
+      },
+      stabilization: {
+        enabled: true,
+        iterations: isHugeGraph ? 60 : (isLargeGraph ? 100 : 180),
+        updateInterval: 15
+      }
     },
     edges: {
-      smooth: { enabled: true, type: 'continuous', roundness: 0.2 },
+      // Use straight lines for large graphs for 10x canvas rendering speedup
+      smooth: isLargeGraph ? false : { enabled: true, type: 'continuous', roundness: 0.2 },
       arrows: { to: { enabled: true, scaleFactor: 0.35 } },
       selectionWidth: 3
     },
-    nodes: { shape: 'dot', borderWidth: 1.5, shadow: { enabled: false } },
+    nodes: {
+      shape: 'dot',
+      borderWidth: 1.5,
+      shadow: { enabled: false },
+      font: { color: '#f0f6fc', size: 11, strokeWidth: 3, strokeColor: '#0d1117' }
+    },
     interaction: {
-      hover: true, tooltipDelay: 150,
-      hideEdgesOnDrag: true, hideNodesOnDrag: false,
-      navigationButtons: false, keyboard: { enabled: true }
+      hover: true,
+      tooltipDelay: 100,
+      hideEdgesOnDrag: true,
+      hideEdgesOnZoom: isLargeGraph,
+      navigationButtons: false,
+      keyboard: { enabled: true }
     },
     layout: { improvedLayout: false }
   });
 
   network.on('stabilizationProgress', function(p) {
     const pct = Math.round(p.iterations / p.total * 100);
-    document.querySelector('#loading span').textContent = 'Stabilizing… ' + pct + '%';
+    document.querySelector('#loading span').textContent = 'Stabilizing layout… ' + pct + '%';
   });
+
   network.on('stabilizationIterationsDone', function() {
     document.getElementById('loading').style.display = 'none';
     network.setOptions({ physics: { enabled: false } });
     physicsOn = false;
+    document.getElementById('btn-physics').classList.remove('active');
+    document.getElementById('btn-physics').textContent = 'Physics: Off';
   });
+
   network.on('click', onNodeClick);
-  network.on('hoverNode', function(e) { container.style.cursor = 'pointer'; });
-  network.on('blurNode', function() { container.style.cursor = 'default'; });
+  network.on('hoverNode', function(e) {
+    container.style.cursor = 'pointer';
+    highlightNeighborhood(e.node);
+  });
+  network.on('blurNode', function() {
+    container.style.cursor = 'default';
+    if (!highlightedNodeId) {
+      resetNeighborhood();
+    }
+  });
 });
 
-// ---- node click -------------------------------------------------------------
+// ---- neighborhood highlighting & label management -------------------------
+function highlightNeighborhood(nodeId) {
+  const connectedNodes = new Set(network.getConnectedNodes(nodeId));
+  connectedNodes.add(nodeId);
+
+  const connectedEdges = new Set(network.getConnectedEdges(nodeId));
+
+  nodesDs.forEach(n => {
+    const isConnected = connectedNodes.has(n.id);
+    let targetLabel = '';
+
+    if (labelMode === 'all') {
+      targetLabel = n.rawLabel;
+    } else if (labelMode === 'none') {
+      targetLabel = '';
+    } else { // 'smart' mode
+      targetLabel = isConnected ? n.rawLabel : (n.showLabelByDefault ? n.rawLabel : '');
+    }
+
+    nodesDs.update({
+      id: n.id,
+      label: targetLabel,
+      opacity: isConnected ? 1 : 0.12
+    });
+  });
+
+  edgesDs.forEach(e => {
+    if (e.hidden) return;
+    const isConnected = connectedEdges.has(e.id);
+    edgesDs.update({
+      id: e.id,
+      color: {
+        color: e.color && e.color.color ? e.color.color : e.color,
+        opacity: isConnected ? 1 : 0.05
+      }
+    });
+  });
+
+  updateDetailPanel(nodeId);
+}
+
+function resetNeighborhood() {
+  highlightedNodeId = null;
+  nodesDs.forEach(n => {
+    let targetLabel = '';
+    if (labelMode === 'all') targetLabel = n.rawLabel;
+    else if (labelMode === 'none') targetLabel = '';
+    else targetLabel = n.showLabelByDefault ? n.rawLabel : '';
+
+    nodesDs.update({ id: n.id, label: targetLabel, opacity: 1 });
+  });
+
+  edgesDs.forEach(e => {
+    if (e.hidden) return;
+    edgesDs.update({
+      id: e.id,
+      color: { color: e.color && e.color.color ? e.color.color : e.color, opacity: 1 }
+    });
+  });
+}
+
+function resetFocus() {
+  resetNeighborhood();
+  network.fit({ animation: { duration: 400 } });
+  document.getElementById('detail').innerHTML = '<div style="color:#8b949e;font-size:11px">Click or hover a node to inspect its links.</div>';
+}
+
+// ---- node click & detail ---------------------------------------------------
 function onNodeClick(params) {
-  if (!params.nodes.length) return;
-  const id = params.nodes[0];
+  if (!params.nodes.length) {
+    resetFocus();
+    return;
+  }
+  highlightedNodeId = params.nodes[0];
+  highlightNeighborhood(highlightedNodeId);
+  network.focus(highlightedNodeId, { scale: 1.2, animation: { duration: 350 } });
+}
+
+function updateDetailPanel(id) {
   const n = nodesDs.get(id);
+  if (!n) return;
   const inEdges = ALL_EDGES.filter(e => e.to === id && !e.hidden);
   const outEdges = ALL_EDGES.filter(e => e.from === id && !e.hidden);
   const d = document.getElementById('detail');
@@ -370,6 +508,7 @@ function onNodeClick(params) {
     + row('in-edges', inEdges.length + (inEdges.length ? ' (' + [...new Set(inEdges.map(e=>e.kind))].join(', ') + ')' : ''))
     + row('out-edges', outEdges.length + (outEdges.length ? ' (' + [...new Set(outEdges.map(e=>e.kind))].join(', ') + ')' : ''));
 }
+
 function row(k, v) {
   return '<div class="row"><span class="key">' + k + '</span><span class="val">' + esc(String(v)) + '</span></div>';
 }
@@ -380,18 +519,32 @@ function onSearch(q) {
   const lq = q.trim().toLowerCase();
   const fc = document.getElementById('found-count');
   if (!lq) {
-    nodesDs.forEach(n => nodesDs.update({ id: n.id, color: buildColor(n), opacity: 1 }));
+    resetNeighborhood();
     fc.textContent = '';
     return;
   }
   let found = 0;
+  let firstMatchId = null;
+
   nodesDs.forEach(n => {
     const match = n.fullLabel.toLowerCase().includes(lq) || n.kind.includes(lq);
-    if (match) found++;
-    nodesDs.update({ id: n.id, opacity: match ? 1 : 0.08,
-      color: match ? { background:'#FFF176', border:'#F9A825', highlight:{background:'#FFF176',border:'#F9A825'} } : buildColor(n) });
+    if (match) {
+      found++;
+      if (!firstMatchId) firstMatchId = n.id;
+    }
+    nodesDs.update({
+      id: n.id,
+      label: match ? n.rawLabel : '',
+      opacity: match ? 1 : 0.08,
+      color: match ? { background:'#FFF176', border:'#F9A825', highlight:{background:'#FFF176',border:'#F9A825'} } : buildColor(n)
+    });
   });
+
   fc.textContent = found ? found + ' match' + (found>1?'es':'') : 'No matches';
+  if (firstMatchId && found === 1) {
+    network.focus(firstMatchId, { scale: 1.3, animation: { duration: 300 } });
+    updateDetailPanel(firstMatchId);
+  }
 }
 
 function buildColor(n) {
@@ -422,10 +575,42 @@ function applyNodeFilters() {
 function applyEdgeFilter(kind, visible) {
   edgesDs.forEach(e => {
     if (e.kind === kind) {
-      edgesDs.update({ id: e.id, hidden: !visible,
-        color: { color: e.color && e.color.color ? e.color.color : e.color, opacity: visible ? 1 : 0 } });
+      edgesDs.update({
+        id: e.id,
+        hidden: !visible,
+        color: { color: e.color && e.color.color ? e.color.color : e.color, opacity: visible ? 1 : 0 }
+      });
     }
   });
+}
+
+// ---- toolbar actions -------------------------------------------------------
+function toggleLabelMode() {
+  const btn = document.getElementById('btn-labels');
+  if (labelMode === 'smart') {
+    labelMode = 'all';
+    btn.textContent = 'Labels: All';
+  } else if (labelMode === 'all') {
+    labelMode = 'none';
+    btn.textContent = 'Labels: None';
+  } else {
+    labelMode = 'smart';
+    btn.textContent = 'Labels: Smart';
+  }
+  resetNeighborhood();
+}
+
+function togglePhysics() {
+  physicsOn = !physicsOn;
+  const btn = document.getElementById('btn-physics');
+  if (physicsOn) {
+    btn.classList.add('active');
+    btn.textContent = 'Physics: On';
+  } else {
+    btn.classList.remove('active');
+    btn.textContent = 'Physics: Off';
+  }
+  network.setOptions({ physics: { enabled: physicsOn } });
 }
 
 // ---- tabs -------------------------------------------------------------------
@@ -435,12 +620,6 @@ function switchTab(name, el) {
   ['filters','edges','legend'].forEach(id => {
     document.getElementById('tab-' + id).style.display = id === name ? '' : 'none';
   });
-}
-
-// ---- toolbar ----------------------------------------------------------------
-function togglePhysics() {
-  physicsOn = !physicsOn;
-  network.setOptions({ physics: { enabled: physicsOn } });
 }
 </script>
 </body>
