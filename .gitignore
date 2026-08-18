@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.cache/
+.idea/
+.vscode/
+.graphify-sfcc-cache/
+.sfcc-graph-cache/
+.scannerwork/
+coverage/
+MEMORY.md

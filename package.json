@@ -1,0 +1,69 @@
+{
+  "name": "graphify-sfcc",
+
+  "version": "0.1.0",
+  "description": "Demandware-aware code-graph MCP server + engine: cartridge-path resolution, parsers, graph queries, function/symbol layer, CLI, visualizer, and a grep-router hook.",
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "sfcc",
+    "sfra",
+    "demandware",
+    "salesforce-commerce-cloud",
+    "code-graph",
+    "cartridge"
+  ],
+  "license": "MIT",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": "./dist/index.js",
+    "./resolver": "./dist/resolve/cartridgePath.js",
+    "./repo": "./dist/resolve/repo.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "INSTALLATION.md",
+    "LICENSE"
+  ],
+  "bin": {
+    "graphify-sfcc": "./dist/cli.js",
+    "sfcc-graph": "./dist/cli.js"
+  },
+
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "prepare": "npm run build",
+    "prepublishOnly": "npm run build && npm test && npm run smoke",
+    "start": "node dist/cli.js serve",
+    "test": "node -e \"fs.mkdirSync('coverage',{recursive:true})\" && node --test --experimental-test-coverage --test-reporter=spec --test-reporter-destination=stdout --test-reporter=lcov --test-reporter-destination=coverage/lcov.info test/*.test.js && node scripts/fix-coverage-paths.js",
+
+
+
+    "smoke": "node test/smoke.js",
+    "install-skill": "node dist/cli.js install --project"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/server": "2.0.0",
+    "@typescript-eslint/typescript-estree": "^8.67.0",
+    "commander": "^15.0.0",
+    "fast-glob": "^3.3.2",
+    "fast-xml-parser": "^5.10.1",
+    "graphology": "^0.26.0",
+    "graphology-shortest-path": "^2.1.0",
+    "graphology-traversal": "^0.3.1",
+    "htmlparser2": "^9.1.0",
+    "pathe": "^2.0.3",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "typescript": "^5.5.0"
+  }
+}
