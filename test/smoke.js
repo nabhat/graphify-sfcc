@@ -9,8 +9,6 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 // Default to the parent of the tool dir (the workspace it's wired into); override with SFCC_GRAPH_ROOT.
 process.env.SFCC_GRAPH_ROOT = process.env.SFCC_GRAPH_ROOT || path.resolve(here, '../..');
 
-
-
 const { Index } = await import('../dist/index.js');
 
 let failures = 0;
@@ -27,6 +25,12 @@ console.log('Root:', process.env.SFCC_GRAPH_ROOT);
 const idx = Index.build();
 const stats = idx.stats();
 console.log('Stats:', JSON.stringify(stats));
+
+if (stats.files === 0) {
+    console.log(`\nNo SFCC codebase found at SFCC_GRAPH_ROOT (${process.env.SFCC_GRAPH_ROOT}).`);
+    console.log('Skipping integration smoke test. Set SFCC_GRAPH_ROOT=/path/to/sfcc-storefront to run smoke assertions.\n');
+    process.exit(0);
+}
 
 // ---- structural invariants (true for any SFRA repo) ----
 assert(stats.files > 0, 'parsed some files');
