@@ -45,7 +45,8 @@ function idx(): Index {
 
 /** Build an McpServer with every sfcc-graph tool registered. */
 export function buildMcpServer(): McpServer {
-    const server = new McpServer({ name: 'graphify-sfcc', version: '0.1.0' });
+    const server = new McpServer({ name: 'graphify-sfcc', version: '0.1.1' });
+
 
     server.registerTool(
         'build_index',

@@ -1,7 +1,8 @@
 {
   "name": "graphify-sfcc",
 
-  "version": "0.1.0",
+  "version": "0.1.1",
+
   "description": "Demandware-aware code-graph MCP server + engine: cartridge-path resolution, parsers, graph queries, function/symbol layer, CLI, visualizer, and a grep-router hook.",
   "keywords": [
     "mcp",
@@ -27,8 +28,10 @@
     "dist",
     "README.md",
     "INSTALLATION.md",
+    "CHANGELOG.md",
     "LICENSE"
   ],
+
   "bin": {
     "graphify-sfcc": "./dist/cli.js",
     "sfcc-graph": "./dist/cli.js"
